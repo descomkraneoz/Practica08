@@ -1,22 +1,23 @@
 package net.iesseveroochoa.manuelmartinez.practica08;
 
-import androidx.annotation.NonNull;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-
 import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.location.Location;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.View;
 import android.widget.CompoundButton;
 import android.widget.TextView;
+import android.widget.Toast;
 import android.widget.ToggleButton;
+
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.google.android.gms.common.api.ResolvableApiException;
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -27,11 +28,20 @@ import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.LocationSettingsRequest;
 import com.google.android.gms.location.LocationSettingsResponse;
 import com.google.android.gms.location.SettingsClient;
+import com.google.android.gms.maps.CameraUpdate;
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.CameraPosition;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.android.gms.tasks.Task;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements OnMapReadyCallback {
     public static final int MY_PERMISSIONS_REQUEST_READ_LOCATION = 1;
     private static final int REQUEST_CONFIG_UBICACION = 201;
     private static final String LOGTAG = "";
@@ -44,7 +54,13 @@ public class MainActivity extends AppCompatActivity {
     LocationRequest mLocationRequest;
     //Evento que permitirá obtener actualizaciones
     private LocationCallback mLocationCallback;
-
+    //Variables para obtener y guardar las posiciones en un mapa
+    double latitud;
+    double longitud;
+    LatLng inicio;
+    LatLng fin;
+    //Variable para crear el mapa
+    private GoogleMap mMap;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -53,6 +69,14 @@ public class MainActivity extends AppCompatActivity {
         tvLatitud = findViewById(R.id.tvLatitud);
         tvLongitud = findViewById(R.id.tvLongitud);
         tbActualizar = findViewById(R.id.tbIniciar);
+
+        //Inicializamos las posiciones por defecto
+        latitud = 38.0846;
+        longitud = -0.9431;
+
+        SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
+                .findFragmentById(R.id.map2);
+        mapFragment.getMapAsync(this);
 
         //instanciamos el servicio de geolocalización
         ultimaLocalizacionConocida = LocationServices.getFusedLocationProviderClient(this);
@@ -65,12 +89,6 @@ public class MainActivity extends AppCompatActivity {
                     MY_PERMISSIONS_REQUEST_READ_LOCATION);
         }
 
-        tbActualizar.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                solicitarUltimaLocalizacion();
-            }
-        });
 
         // Activamos y desactivamos la localización con el botón
         tbActualizar.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
@@ -79,12 +97,105 @@ public class MainActivity extends AppCompatActivity {
                                          boolean enable) {
                 if (enable) {
                     activaLocationUpdates();
+                    obtenerPosicion();
+                    solicitarUltimaLocalizacion();
                 } else {
                     desactivaLocationUpdates();
+                    obtenerPosicion();
+                    insertarMarcadorFinal();
+                    dibujarLineas();
+                    //animarPuntoFinalRuta();
+
                 }
             }
         });
 
+    }
+
+    /**
+     * inicializa el mapa y los puntos sobre este
+     */
+    @Override
+    public void onMapReady(GoogleMap googleMap) {
+        mMap = googleMap;
+
+    }
+
+    /**
+     * Metodo para obtener la posicion
+     */
+    private void obtenerPosicion() {
+        CameraPosition camPos = mMap.getCameraPosition();
+        LatLng coordenadas = camPos.target;
+        latitud = coordenadas.latitude;
+        longitud = coordenadas.longitude;
+        fin = new LatLng(latitud, longitud);
+        Toast.makeText(this, "Lat: " + latitud + " | Long: " + longitud, Toast.LENGTH_SHORT).show();
+
+    }
+
+    /**
+     * Insertar marcadores
+     */
+    private void insertarMarcadorInicial() {
+        mMap.addMarker(new MarkerOptions().position(inicio).title("Inicio"));
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(inicio));
+        //animarPuntoInicialRuta();
+
+    }
+
+    private void insertarMarcadorFinal() {
+        mMap.addMarker(new MarkerOptions().position(fin).title("Final"));
+        mMap.moveCamera(CameraUpdateFactory.newLatLng(fin));
+        //dibujarLineas();
+        //animarPuntoFinalRuta();
+    }
+
+    /**
+     * Metodo para animar el mapa
+     */
+    private void animarPuntoFinalRuta() {
+        //fin = new LatLng(40.417325, -3.683081);
+
+        CameraPosition camPos = new CameraPosition.Builder()
+                .target(fin)   //Centramos el mapa en el ultimo punto
+                .zoom(19)         //Establecemos el zoom en 19
+                .bearing(45)      //Establecemos la orientación con el noreste arriba
+                .tilt(45)         //Bajamos el punto de vista de la cámara 45 grados
+                .build();
+
+        CameraUpdate camUpd3 =
+                CameraUpdateFactory.newCameraPosition(camPos);
+
+        mMap.animateCamera(camUpd3);
+    }
+
+    private void animarPuntoInicialRuta() {
+        CameraPosition camPos = new CameraPosition.Builder()
+                .target(inicio)   //Centramos el mapa en el primer punto
+                .zoom(19)         //Establecemos el zoom en 19
+                .bearing(45)      //Establecemos la orientación con el noreste arriba
+                .tilt(45)         //Bajamos el punto de vista de la cámara 45 grados
+                .build();
+
+        CameraUpdate camUpd3 =
+                CameraUpdateFactory.newCameraPosition(camPos);
+
+        mMap.animateCamera(camUpd3);
+    }
+
+    /**
+     * Dibujar lineas en el mapa que unen los puntos de una ruta
+     */
+    private void dibujarLineas() {
+        //Dibujo con Lineas
+        PolylineOptions lineas = new PolylineOptions()
+                .add(inicio)
+                .add(fin);
+        lineas.width(8);
+        lineas.color(Color.RED);
+        mMap.addPolyline(lineas);
+        animarPuntoFinalRuta();
     }
 
     /**
@@ -94,8 +205,10 @@ public class MainActivity extends AppCompatActivity {
         if (loc != null) {
             tvLatitud.setText("Latitud: " +
                     String.valueOf(loc.getLatitude()));
+            latitud = loc.getLatitude();
             tvLongitud.setText("Longitud: " +
                     String.valueOf(loc.getLongitude()));
+            longitud = loc.getLongitude();
         } else {
             tvLatitud.setText("Latitud: (desconocida)");
             tvLongitud.setText("Longitud: (desconocida)");
@@ -103,13 +216,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * Nos permite crear una solicitud de última locacización conocidad
+     * Nos permite crear una solicitud de última locacización conocida
      */
     private void solicitarUltimaLocalizacion() {
         ultimaLocalizacionConocida.getLastLocation().addOnSuccessListener(this, new OnSuccessListener<Location>() {
             @Override
             public void onSuccess(Location location) {
                 actualizaLocalizacionUI(location);
+                inicio = new LatLng(location.getLatitude(), location.getLongitude());
+                insertarMarcadorInicial();
+
             }
         });
     }
@@ -145,19 +261,15 @@ public class MainActivity extends AppCompatActivity {
         //definimos el evento de recepcion de localizaciones
         mLocationCallback = new LocationCallback() {
             @Override
-            public void onLocationResult(LocationResult
-                                                 locationResult) {
+            public void onLocationResult(LocationResult locationResult) {
                 if (locationResult == null) {
                     return;
                 }
-                for (Location location :
-                        locationResult.getLocations()) {
+                for (Location location : locationResult.getLocations()) {
                     // Actualizamos la nueva localizacion
                     actualizaLocalizacionUI(location);
                 }
             }
-
-            ;
         };
     }
 
@@ -193,8 +305,7 @@ public class MainActivity extends AppCompatActivity {
                         //solicitamos las actualizacion de localizaciones
 
                         ultimaLocalizacionConocida.requestLocationUpdates(mLocationRequest,
-                                mLocationCallback,
-                                null /* Looper */);
+                                mLocationCallback, null /* Looper */);
                     }
                 });
         //indicamos que hacemos si falla. En nuestro caso le pedimos al usuario que active GPS
